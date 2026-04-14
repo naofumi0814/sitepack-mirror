@@ -48,10 +48,10 @@ from sitepack.core.preview_server import PreviewServer
 logger = logging.getLogger(__name__)
 
 _ASSET_FILTER_OPTIONS: dict[str, str] = {
-    "All": "all",
-    "Images only": "images",
-    "CSS + JS only": "css_js",
-    "None": "none",
+    "すべて": "all",
+    "画像のみ": "images",
+    "CSS＋JSのみ": "css_js",
+    "なし": "none",
 }
 
 _ASSET_FILTER_REVERSE: dict[str, str] = {v: k for k, v in _ASSET_FILTER_OPTIONS.items()}
@@ -152,7 +152,7 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
 
-        self.setWindowTitle("SitePack \u2014 Website Static Packager")
+        self.setWindowTitle("SitePack \u2014 ウェブサイト静的パッケージャー")
         self.setMinimumSize(900, 700)
 
         self._worker: CrawlWorker | None = None
@@ -180,10 +180,10 @@ class MainWindow(QMainWindow):
 
         # --- Tabs ---
         self._tabs = QTabWidget()
-        self._tabs.addTab(self._build_basic_settings_tab(), "Basic Settings")
-        self._tabs.addTab(self._build_rendering_tab(), "Rendering")
-        self._tabs.addTab(self._build_exclusions_tab(), "Exclusions")
-        self._tabs.addTab(self._build_log_tab(), "Log")
+        self._tabs.addTab(self._build_basic_settings_tab(), "基本設定")
+        self._tabs.addTab(self._build_rendering_tab(), "レンダリング")
+        self._tabs.addTab(self._build_exclusions_tab(), "除外設定")
+        self._tabs.addTab(self._build_log_tab(), "ログ")
         root_layout.addWidget(self._tabs, stretch=1)
 
         # --- Progress section ---
@@ -195,23 +195,23 @@ class MainWindow(QMainWindow):
         # --- Status bar ---
         self._status_bar = QStatusBar()
         self.setStatusBar(self._status_bar)
-        self._status_bar.showMessage("Ready")
+        self._status_bar.showMessage("準備完了")
 
     # -- Project group ------------------------------------------------------
 
     def _build_project_group(self) -> QGroupBox:
-        group = QGroupBox("Project")
+        group = QGroupBox("プロジェクト")
         layout = QFormLayout(group)
         layout.setContentsMargins(12, 20, 12, 12)
         layout.setSpacing(8)
 
         self._start_url_edit = QLineEdit()
         self._start_url_edit.setPlaceholderText("https://example.com")
-        layout.addRow("Start URL:", self._start_url_edit)
+        layout.addRow("開始URL:", self._start_url_edit)
 
         self._project_name_edit = QLineEdit()
         self._project_name_edit.setPlaceholderText("my-project")
-        layout.addRow("Project name:", self._project_name_edit)
+        layout.addRow("プロジェクト名:", self._project_name_edit)
 
         output_row = QHBoxLayout()
         self._output_dir_edit = QLineEdit()
@@ -219,12 +219,12 @@ class MainWindow(QMainWindow):
         self._output_dir_edit.setText(str(Path.home() / "sitepack-output"))
         output_row.addWidget(self._output_dir_edit)
 
-        self._browse_btn = QPushButton("Browse\u2026")
-        self._browse_btn.setFixedWidth(90)
+        self._browse_btn = QPushButton("参照\u2026")
+        self._browse_btn.setFixedWidth(70)
         self._browse_btn.clicked.connect(self._browse_output_folder)
         output_row.addWidget(self._browse_btn)
 
-        layout.addRow("Output folder:", output_row)
+        layout.addRow("保存先フォルダ:", output_row)
 
         return group
 
@@ -236,48 +236,48 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(8)
 
-        self._same_host_cb = QCheckBox("Only crawl the same host")
+        self._same_host_cb = QCheckBox("同一ホストのみ巡回する")
         self._same_host_cb.setChecked(True)
         layout.addRow(self._same_host_cb)
 
-        self._include_subdomains_cb = QCheckBox("Include subdomains")
+        self._include_subdomains_cb = QCheckBox("サブドメインも含める")
         layout.addRow(self._include_subdomains_cb)
 
         self._max_depth_spin = QSpinBox()
         self._max_depth_spin.setRange(1, 999)
         self._max_depth_spin.setValue(10)
-        layout.addRow("Max depth:", self._max_depth_spin)
+        layout.addRow("最大深度:", self._max_depth_spin)
 
         self._concurrency_spin = QSpinBox()
         self._concurrency_spin.setRange(1, 64)
         self._concurrency_spin.setValue(4)
-        layout.addRow("Concurrency:", self._concurrency_spin)
+        layout.addRow("同時接続数:", self._concurrency_spin)
 
         self._request_delay_spin = QDoubleSpinBox()
         self._request_delay_spin.setRange(0.0, 60.0)
         self._request_delay_spin.setSingleStep(0.1)
         self._request_delay_spin.setDecimals(1)
         self._request_delay_spin.setValue(0.5)
-        self._request_delay_spin.setSuffix(" s")
-        layout.addRow("Request delay:", self._request_delay_spin)
+        self._request_delay_spin.setSuffix(" 秒")
+        layout.addRow("リクエスト間隔:", self._request_delay_spin)
 
         self._timeout_spin = QSpinBox()
         self._timeout_spin.setRange(1, 300)
         self._timeout_spin.setValue(30)
-        self._timeout_spin.setSuffix(" s")
-        layout.addRow("Timeout:", self._timeout_spin)
+        self._timeout_spin.setSuffix(" 秒")
+        layout.addRow("タイムアウト:", self._timeout_spin)
 
-        self._respect_robots_cb = QCheckBox("Respect robots.txt")
+        self._respect_robots_cb = QCheckBox("robots.txt を尊重する")
         self._respect_robots_cb.setChecked(True)
         layout.addRow(self._respect_robots_cb)
 
-        self._fetch_external_cb = QCheckBox("Fetch external assets (CSS, JS, images)")
+        self._fetch_external_cb = QCheckBox("外部アセットを取得する（CSS・JS・画像など）")
         self._fetch_external_cb.setChecked(True)
         layout.addRow(self._fetch_external_cb)
 
         self._asset_filter_combo = QComboBox()
         self._asset_filter_combo.addItems(list(_ASSET_FILTER_OPTIONS.keys()))
-        layout.addRow("Asset filter:", self._asset_filter_combo)
+        layout.addRow("アセットフィルター:", self._asset_filter_combo)
 
         return tab
 
@@ -289,10 +289,10 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(8)
 
-        self._use_renderer_cb = QCheckBox("Use browser renderer (Playwright)")
+        self._use_renderer_cb = QCheckBox("ブラウザレンダリング取得を使う（Playwright）")
         layout.addRow(self._use_renderer_cb)
 
-        self._lazy_scroll_cb = QCheckBox("Lazy-scroll pages to trigger loading")
+        self._lazy_scroll_cb = QCheckBox("遅延読み込み対策のための自動スクロールを行う")
         self._lazy_scroll_cb.setChecked(True)
         layout.addRow(self._lazy_scroll_cb)
 
@@ -301,8 +301,8 @@ class MainWindow(QMainWindow):
         self._wait_after_load_spin.setSingleStep(0.5)
         self._wait_after_load_spin.setDecimals(1)
         self._wait_after_load_spin.setValue(1.0)
-        self._wait_after_load_spin.setSuffix(" s")
-        layout.addRow("Wait after load:", self._wait_after_load_spin)
+        self._wait_after_load_spin.setSuffix(" 秒")
+        layout.addRow("読み込み後の待機時間:", self._wait_after_load_spin)
 
         self._user_agent_edit = QLineEdit()
         self._user_agent_edit.setText(
@@ -323,7 +323,7 @@ class MainWindow(QMainWindow):
         layout.setSpacing(10)
 
         # Excluded extensions
-        ext_label = QLabel("Excluded extensions (one per line):")
+        ext_label = QLabel("除外する拡張子（1行に1つ）:")
         layout.addWidget(ext_label)
 
         self._excluded_ext_edit = QTextEdit()
@@ -334,7 +334,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._excluded_ext_edit)
 
         # Excluded paths
-        path_label = QLabel("Excluded URL paths (one per line):")
+        path_label = QLabel("除外するURLパス（1行に1つ）:")
         layout.addWidget(path_label)
 
         self._excluded_paths_edit = QTextEdit()
@@ -342,11 +342,11 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._excluded_paths_edit)
 
         # Strip tracking params
-        self._strip_tracking_cb = QCheckBox("Strip tracking parameters")
+        self._strip_tracking_cb = QCheckBox("トラッキングパラメータを除去する")
         self._strip_tracking_cb.setChecked(True)
         layout.addWidget(self._strip_tracking_cb)
 
-        tracking_label = QLabel("Tracking parameters to strip (one per line):")
+        tracking_label = QLabel("除去するトラッキングパラメータ（1行に1つ）:")
         layout.addWidget(tracking_label)
 
         self._tracking_params_edit = QTextEdit()
@@ -380,7 +380,7 @@ class MainWindow(QMainWindow):
     # -- Progress section ---------------------------------------------------
 
     def _build_progress_section(self) -> QGroupBox:
-        group = QGroupBox("Progress")
+        group = QGroupBox("進捗")
         layout = QVBoxLayout(group)
         layout.setContentsMargins(12, 20, 12, 12)
         layout.setSpacing(6)
@@ -390,7 +390,7 @@ class MainWindow(QMainWindow):
         self._progress_bar.setValue(0)
         layout.addWidget(self._progress_bar)
 
-        self._status_label = QLabel("Idle")
+        self._status_label = QLabel("待機中")
         layout.addWidget(self._status_label)
 
         self._current_url_label = QLabel("")
@@ -402,7 +402,7 @@ class MainWindow(QMainWindow):
         self._current_url_label.setStyleSheet("color: #666;")
         layout.addWidget(self._current_url_label)
 
-        self._summary_label = QLabel("Pages: 0 | Assets: 0 | Failed: 0")
+        self._summary_label = QLabel("ページ: 0 | アセット: 0 | 失敗: 0")
         layout.addWidget(self._summary_label)
 
         return group
@@ -415,32 +415,32 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
 
-        self._start_btn = QPushButton("Start")
+        self._start_btn = QPushButton("開始")
         self._start_btn.setObjectName("startBtn")
-        self._start_btn.setMinimumWidth(100)
+        self._start_btn.setMinimumWidth(90)
         layout.addWidget(self._start_btn)
 
-        self._stop_btn = QPushButton("Stop")
+        self._stop_btn = QPushButton("停止")
         self._stop_btn.setObjectName("stopBtn")
         self._stop_btn.setMinimumWidth(80)
         layout.addWidget(self._stop_btn)
 
-        self._retry_btn = QPushButton("Retry Failed")
-        self._retry_btn.setMinimumWidth(100)
+        self._retry_btn = QPushButton("失敗URLを再試行")
+        self._retry_btn.setMinimumWidth(120)
         layout.addWidget(self._retry_btn)
 
         layout.addStretch()
 
-        self._open_folder_btn = QPushButton("Open Output Folder")
+        self._open_folder_btn = QPushButton("出力フォルダを開く")
         layout.addWidget(self._open_folder_btn)
 
-        self._preview_http_btn = QPushButton("Preview (HTTP)")
+        self._preview_http_btn = QPushButton("プレビュー (HTTP)")
         layout.addWidget(self._preview_http_btn)
 
-        self._preview_file_btn = QPushButton("Preview (file://)")
+        self._preview_file_btn = QPushButton("プレビュー (file://)")
         layout.addWidget(self._preview_file_btn)
 
-        self._export_zip_btn = QPushButton("Export ZIP")
+        self._export_zip_btn = QPushButton("ZIPエクスポート")
         layout.addWidget(self._export_zip_btn)
 
         return bar
@@ -593,7 +593,7 @@ class MainWindow(QMainWindow):
         self._respect_robots_cb.setChecked(config.respect_robots)
         self._fetch_external_cb.setChecked(config.fetch_external_assets)
 
-        combo_label = _ASSET_FILTER_REVERSE.get(config.asset_filter, "All")
+        combo_label = _ASSET_FILTER_REVERSE.get(config.asset_filter, "すべて")
         idx = self._asset_filter_combo.findText(combo_label)
         if idx >= 0:
             self._asset_filter_combo.setCurrentIndex(idx)
@@ -616,24 +616,24 @@ class MainWindow(QMainWindow):
         """Validate inputs, build config, and launch the crawl worker thread."""
         url = self._start_url_edit.text().strip()
         if not url:
-            QMessageBox.warning(self, "Validation Error", "Please enter a start URL.")
+            QMessageBox.warning(self, "入力エラー", "開始URLを入力してください。")
             return
         if not url.startswith(("http://", "https://")):
             QMessageBox.warning(
                 self,
-                "Validation Error",
-                "The start URL must begin with http:// or https://",
+                "入力エラー",
+                "開始URLは http:// または https:// で始まる必要があります。",
             )
             return
 
         project_name = self._project_name_edit.text().strip()
         if not project_name:
-            QMessageBox.warning(self, "Validation Error", "Please enter a project name.")
+            QMessageBox.warning(self, "入力エラー", "プロジェクト名を入力してください。")
             return
 
         output_dir = self._output_dir_edit.text().strip()
         if not output_dir:
-            QMessageBox.warning(self, "Validation Error", "Please select an output folder.")
+            QMessageBox.warning(self, "入力エラー", "保存先フォルダを選択してください。")
             return
 
         config = self._build_config()
@@ -643,18 +643,18 @@ class MainWindow(QMainWindow):
         """Request a graceful stop of the running crawl."""
         if self._worker is not None:
             self._worker.request_stop()
-            self._append_log("Stop requested \u2014 waiting for current operation to finish\u2026")
+            self._append_log("停止要求を送信しました。現在の処理が完了するまでお待ちください\u2026")
 
     def _retry_failed(self) -> None:
         """Re-queue failed URLs and restart the crawl."""
         url = self._start_url_edit.text().strip()
         if not url:
-            QMessageBox.warning(self, "Validation Error", "Please enter a start URL.")
+            QMessageBox.warning(self, "入力エラー", "開始URLを入力してください。")
             return
 
         project_name = self._project_name_edit.text().strip()
         if not project_name:
-            QMessageBox.warning(self, "Validation Error", "Please enter a project name.")
+            QMessageBox.warning(self, "入力エラー", "プロジェクト名を入力してください。")
             return
 
         config = self._build_config()
@@ -665,7 +665,7 @@ class MainWindow(QMainWindow):
         background thread."""
         self._set_crawling_state()
         self._progress_bar.setValue(0)
-        self._summary_label.setText("Pages: 0 | Assets: 0 | Failed: 0")
+        self._summary_label.setText("ページ: 0 | アセット: 0 | 失敗: 0")
 
         self._worker = CrawlWorker(config, retry=retry)
         self._worker.progress.connect(self._update_progress)
@@ -681,7 +681,7 @@ class MainWindow(QMainWindow):
             daemon=True,
         )
         self._worker_thread.start()
-        self._append_log("Crawl started.")
+        self._append_log("クロールを開始しました。")
 
     # ==================================================================
     # Worker signal handlers (called on the main/GUI thread via Qt signals)
@@ -726,16 +726,16 @@ class MainWindow(QMainWindow):
     @Slot(str)
     def _on_crawl_error(self, msg: str) -> None:
         """Handle an error signal from the worker."""
-        self._append_log(f"ERROR: {msg}")
+        self._append_log(f"エラー: {msg}")
 
     @Slot()
     def _on_crawl_finished(self) -> None:
         """Re-enable buttons and update status when the crawl is done."""
         self._refresh_summary()
         self._set_idle_state()
-        self._status_label.setText("Finished")
-        self._status_bar.showMessage("Crawl finished")
-        self._append_log("Crawl finished.")
+        self._status_label.setText("完了")
+        self._status_bar.showMessage("クロール完了")
+        self._append_log("クロールが完了しました。")
         self._worker = None
         self._worker_thread = None
 
@@ -752,8 +752,8 @@ class MainWindow(QMainWindow):
         if not project_dir.is_dir():
             QMessageBox.information(
                 self,
-                "Not Found",
-                f"The output folder does not exist yet:\n{project_dir}",
+                "フォルダが見つかりません",
+                f"出力フォルダがまだ存在しません:\n{project_dir}",
             )
             return
 
@@ -774,8 +774,8 @@ class MainWindow(QMainWindow):
         if not project_dir.is_dir():
             QMessageBox.information(
                 self,
-                "Not Found",
-                f"The output folder does not exist yet:\n{project_dir}",
+                "フォルダが見つかりません",
+                f"出力フォルダがまだ存在しません:\n{project_dir}",
             )
             return
 
@@ -786,13 +786,13 @@ class MainWindow(QMainWindow):
         try:
             self._preview_server = PreviewServer(root_dir=project_dir, port=8080)
             url = self._preview_server.start()
-            self._append_log(f"Preview server started at {url}")
+            self._append_log(f"プレビューサーバーを起動しました: {url}")
             webbrowser.open(url)
         except Exception as exc:
             QMessageBox.critical(
                 self,
-                "Preview Error",
-                f"Could not start preview server:\n{exc}",
+                "プレビューエラー",
+                f"プレビューサーバーを起動できませんでした:\n{exc}",
             )
 
     def _start_preview_file(self) -> None:
@@ -808,8 +808,8 @@ class MainWindow(QMainWindow):
             if not index_path.is_dir():
                 QMessageBox.information(
                     self,
-                    "Not Found",
-                    f"The output folder does not exist yet:\n{project_dir}",
+                    "フォルダが見つかりません",
+                    f"出力フォルダがまだ存在しません:\n{project_dir}",
                 )
                 return
 
@@ -824,39 +824,39 @@ class MainWindow(QMainWindow):
         if not project_dir.is_dir():
             QMessageBox.information(
                 self,
-                "Not Found",
-                f"The output folder does not exist yet:\n{project_dir}",
+                "フォルダが見つかりません",
+                f"出力フォルダがまだ存在しません:\n{project_dir}",
             )
             return
 
         default_name = project_dir.name + ".zip"
         zip_path, _ = QFileDialog.getSaveFileName(
             self,
-            "Export ZIP",
+            "ZIPエクスポート",
             str(project_dir.parent / default_name),
-            "ZIP Archives (*.zip)",
+            "ZIPアーカイブ (*.zip)",
         )
         if not zip_path:
             return
 
         try:
-            self._append_log(f"Exporting to {zip_path}\u2026")
+            self._append_log(f"ZIPに出力中: {zip_path}\u2026")
             with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
                 for file in project_dir.rglob("*"):
                     if file.is_file():
                         arcname = file.relative_to(project_dir)
                         zf.write(file, arcname)
-            self._append_log(f"Export complete: {zip_path}")
+            self._append_log(f"エクスポート完了: {zip_path}")
             QMessageBox.information(
                 self,
-                "Export Complete",
-                f"Project exported to:\n{zip_path}",
+                "エクスポート完了",
+                f"プロジェクトをエクスポートしました:\n{zip_path}",
             )
         except Exception as exc:
             QMessageBox.critical(
                 self,
-                "Export Error",
-                f"Failed to create ZIP:\n{exc}",
+                "エクスポートエラー",
+                f"ZIPファイルの作成に失敗しました:\n{exc}",
             )
 
     # ==================================================================
@@ -868,7 +868,7 @@ class MainWindow(QMainWindow):
         current = self._output_dir_edit.text().strip()
         start_dir = current if current and Path(current).is_dir() else str(Path.home())
         folder = QFileDialog.getExistingDirectory(
-            self, "Select Output Folder", start_dir
+            self, "保存先フォルダを選択", start_dir
         )
         if folder:
             self._output_dir_edit.setText(folder)
@@ -881,8 +881,8 @@ class MainWindow(QMainWindow):
         if not output_dir or not project_name:
             QMessageBox.warning(
                 self,
-                "Missing Information",
-                "Please fill in both the output folder and the project name.",
+                "入力不足",
+                "保存先フォルダとプロジェクト名の両方を入力してください。",
             )
             return None
         return Path(output_dir) / project_name
@@ -896,7 +896,7 @@ class MainWindow(QMainWindow):
                 assets = len(state.asset_hashes)
                 failed = len(state.failed_urls)
                 self._summary_label.setText(
-                    f"Pages: {pages} | Assets: {assets} | Failed: {failed}"
+                    f"ページ: {pages} | アセット: {assets} | 失敗: {failed}"
                 )
 
     @staticmethod
