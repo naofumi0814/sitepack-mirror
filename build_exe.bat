@@ -1,10 +1,7 @@
 @echo off
 REM ========================================================================
-REM  SitePack â€” Windows ç”¨ã€Œå˜ä¸€ .exeã€ãƒ“ãƒ«ãƒ‰ã‚¹ã‚¯ãƒªãƒ—ãƒˆ
-REM ------------------------------------------------------------------------
-REM  PyInstaller ã‚’ä½¿ã£ã¦ dist\SitePack.exe ã‚’ä½œæˆã—ã¾ã™ã€‚
-REM  ç”Ÿæˆã•ã‚ŒãŸ .exe ã¯ãƒ€ãƒ–ãƒ«ã‚¯ãƒªãƒƒã‚¯ã ã‘ã§èµ·å‹•ã§ãã€Python ã®ã‚¤ãƒ³ã‚¹
-REM  ãƒˆãƒ¼ãƒ«ãªã—ã«é…å¸ƒå¯èƒ½ã§ã™ã€‚
+REM  SitePack - Windows single-exe build script
+REM  Creates dist\SitePack.exe via PyInstaller.
 REM ========================================================================
 
 setlocal
@@ -16,29 +13,34 @@ if exist ".venv\Scripts\python.exe" (
     set "PY=python"
 )
 
-echo === [1/3] ä¾å­˜ãƒ‘ãƒƒã‚±ãƒ¼ã‚¸ã‚’ç¢ºèª ===
+echo === [1/3] ˆË‘¶ƒpƒbƒP[ƒW‚ğŠm”F‚µ‚Ä‚¢‚Ü‚· ===
 "%PY%" -m pip install --upgrade pip
+if errorlevel 1 goto :fail
 "%PY%" -m pip install -e ".[dev]"
+if errorlevel 1 goto :fail
 
-echo === [2/3] å¤ã„ build/dist ã‚’å‰Šé™¤ ===
+echo === [2/3] ŒÃ‚¢ build/dist ‚ğíœ ===
 if exist build rmdir /s /q build
 if exist dist  rmdir /s /q dist
 
-echo === [3/3] PyInstaller ã§ãƒ“ãƒ«ãƒ‰ ===
+echo === [3/3] PyInstaller ‚Åƒrƒ‹ƒh ===
 "%PY%" -m PyInstaller --noconfirm sitepack.spec
+if errorlevel 1 goto :fail
 
 if exist "dist\SitePack.exe" (
     echo.
     echo ========================================
-    echo  ãƒ“ãƒ«ãƒ‰æˆåŠŸ: dist\SitePack.exe
-    echo  ãƒ€ãƒ–ãƒ«ã‚¯ãƒªãƒƒã‚¯ã§èµ·å‹•ã§ãã¾ã™ã€‚
+    echo  ƒrƒ‹ƒh¬Œ÷: dist\SitePack.exe
+    echo  ƒ_ƒuƒ‹ƒNƒŠƒbƒN‚Å‹N“®‚Å‚«‚Ü‚·B
     echo ========================================
-) else (
-    echo.
-    echo ãƒ“ãƒ«ãƒ‰ã«å¤±æ•—ã—ã¾ã—ãŸã€‚ã‚¨ãƒ©ãƒ¼ãƒ­ã‚°ã‚’ç¢ºèªã—ã¦ãã ã•ã„ã€‚
     pause
-    exit /b 1
+    endlocal
+    exit /b 0
 )
 
-endlocal
+:fail
+echo.
+echo ƒrƒ‹ƒh‚É¸”s‚µ‚Ü‚µ‚½Bã‚ÌƒGƒ‰[ƒƒO‚ğŠm”F‚µ‚Ä‚­‚¾‚³‚¢B
 pause
+endlocal
+exit /b 1
