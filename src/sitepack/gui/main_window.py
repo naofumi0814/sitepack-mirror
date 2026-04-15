@@ -41,7 +41,7 @@ from PySide6.QtWidgets import (
     QSplitter,
 )
 
-from sitepack.core.config import AppConfig
+from sitepack.core.config import AppConfig, sanitize_project_name
 from sitepack.core.crawl_manager import CrawlManager
 from sitepack.core.preview_server import PreviewServer
 
@@ -630,6 +630,22 @@ class MainWindow(QMainWindow):
         if not project_name:
             QMessageBox.warning(self, "入力エラー", "プロジェクト名を入力してください。")
             return
+
+        safe_name = sanitize_project_name(project_name)
+        if safe_name != project_name:
+            reply = QMessageBox.question(
+                self,
+                "プロジェクト名を確認",
+                f"プロジェクト名に使用できない文字が含まれています。\n"
+                f"入力: {project_name!r}\n"
+                f"修正案: {safe_name!r}\n\n"
+                f"この名前でクロールを続行してよろしいですか？",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+            self._project_name_edit.setText(safe_name)
 
         output_dir = self._output_dir_edit.text().strip()
         if not output_dir:

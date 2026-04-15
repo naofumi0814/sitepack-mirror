@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Self
@@ -31,6 +32,45 @@ _DEFAULT_TRACKING_PARAMS: list[str] = [
     "mc_cid",
     "mc_eid",
 ]
+
+
+# Characters that are illegal in Windows filenames (also a good superset for
+# macOS/Linux). We also treat path separators as illegal inside a project
+# name so that nobody can accidentally inject an absolute path or a URL.
+_PROJECT_NAME_ILLEGAL_RE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+
+# Windows reserved device names (case-insensitive).
+_WINDOWS_RESERVED = frozenset({
+    "con", "prn", "aux", "nul",
+    "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8", "com9",
+    "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9",
+})
+
+
+def sanitize_project_name(name: str) -> str:
+    """Return a filesystem-safe, cross-platform project directory name.
+
+    * Leading/trailing whitespace is stripped.
+    * Illegal characters (``/ \\ : * ? " < > |`` and control chars) are
+      replaced with ``_``.
+    * Trailing dots and spaces are stripped (Windows requirement).
+    * Reserved device names (``CON``, ``PRN`` …) get an underscore suffix.
+    * An empty result collapses to ``sitepack_project``.
+    """
+    if name is None:
+        return "sitepack_project"
+
+    cleaned = name.strip()
+    cleaned = _PROJECT_NAME_ILLEGAL_RE.sub("_", cleaned)
+    # Windows disallows trailing dots / spaces in path components
+    cleaned = cleaned.rstrip(" .")
+
+    # If everything was illegal (e.g. "///" -> "___") treat as empty
+    if not cleaned or cleaned.strip("_") == "":
+        return "sitepack_project"
+    if cleaned.lower() in _WINDOWS_RESERVED:
+        cleaned = f"{cleaned}_"
+    return cleaned
 
 
 @dataclass
@@ -74,6 +114,18 @@ class AppConfig:
                 self.asset_filter,
             )
             self.asset_filter = "all"
+
+        # Always sanitize project_name: guarantees we never try to create a
+        # path like "06/https://naofumi.org" on Windows (WinError 123).
+        safe = sanitize_project_name(self.project_name)
+        if safe != self.project_name:
+            logger.warning(
+                "Project name %r contained illegal characters; "
+                "using %r instead.",
+                self.project_name,
+                safe,
+            )
+            self.project_name = safe
 
     def to_dict(self) -> dict:
         """Serialize the configuration to a plain dictionary.
