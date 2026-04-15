@@ -163,8 +163,8 @@ class AssetDownloader:
 
                 content_hash = hasher.hexdigest()
 
-                # Deduplication via state's hash map
-                existing = self._state.hash_map.get(content_hash)
+                # Deduplication via state's asset hashes
+                existing = self._state.asset_hashes.get(content_hash)
                 if existing is not None:
                     existing_path = Path(existing)
                     if existing_path.exists() and existing_path != save_path:
@@ -190,7 +190,7 @@ class AssetDownloader:
 
                 # Commit the download
                 tmp_path.replace(save_path)
-                self._state.hash_map[content_hash] = str(save_path)
+                self._state.asset_hashes[content_hash] = str(save_path)
 
                 logger.debug(
                     "Saved asset %s -> %s (hash=%s)",
@@ -334,7 +334,7 @@ class AssetDownloader:
                     async for chunk in response.aiter_bytes(chunk_size=65_536):
                         fh.write(chunk)
 
-            self._state.hash_map[content_hash] = str(save_path)
+            self._state.asset_hashes[content_hash] = str(save_path)
             logger.debug("Re-downloaded asset %s -> %s", url, save_path)
             return True
         except Exception:

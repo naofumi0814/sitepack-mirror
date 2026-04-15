@@ -396,12 +396,12 @@ class CrawlManager:
             try:
                 if local_path.endswith(".html") or local_path.endswith("/index.html"):
                     content = full_path.read_text(encoding="utf-8", errors="replace")
-                    rewritten = self._rewriter.rewrite_html(content, url, Path(local_path))
+                    rewritten = self._rewriter.rewrite_html(content, url, full_path)
                     full_path.write_text(rewritten, encoding="utf-8")
                     rewritten_count += 1
                 elif local_path.endswith(".css"):
                     content = full_path.read_text(encoding="utf-8", errors="replace")
-                    rewritten = self._rewriter.rewrite_css(content, url, Path(local_path))
+                    rewritten = self._rewriter.rewrite_css(content, url, full_path)
                     full_path.write_text(rewritten, encoding="utf-8")
                     rewritten_count += 1
             except Exception as exc:

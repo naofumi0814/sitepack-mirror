@@ -39,10 +39,39 @@ playwright install chromium
 
 ## 実行方法
 
-```bash
-# GUIを起動
-python -m sitepack
+### ダブルクリックで起動 (推奨)
 
+OS に応じて、リポジトリ直下の以下のファイルをダブルクリックしてください。
+
+| OS | ファイル | 備考 |
+|----|---------|------|
+| **Windows** | `SitePack.bat` | コンソール非表示で GUI のみ起動 |
+| **macOS** | `SitePack.command` | 初回は `chmod +x SitePack.command` が必要な場合あり |
+| **Linux** | `SitePack.sh` または `SitePack.desktop` | ファイルマネージャから「実行可能としてマーク」 |
+
+ランチャーは自動的に以下の順で Python を探します:
+
+1. リポジトリ内の `.venv/` （存在すれば優先）
+2. システムにインストール済みの `python3` / `python` / `pythonw`
+
+### Python が無い PC へ配布する場合 (単一 `.exe`)
+
+Windows で `build_exe.bat` をダブルクリックすると、PyInstaller を使って
+`dist\SitePack.exe` を生成します。この `.exe` は Python のインストール
+なしにダブルクリックだけで起動できます。
+
+macOS / Linux でも以下で同等のバイナリが作れます:
+
+```bash
+pip install -e ".[dev]"
+pyinstaller --noconfirm sitepack.spec
+# → dist/SitePack (実行可能ファイル) が生成されます
+```
+
+### コマンドラインから起動
+
+```bash
+python -m sitepack
 # または
 sitepack
 ```

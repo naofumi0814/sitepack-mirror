@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=SitePack
+Name[ja]=SitePack — ウェブサイト静的パッケージャー
+Comment=Download an entire website for offline browsing
+Comment[ja]=ウェブサイト全体をオフライン閲覧用に保存
+Exec=bash -c "cd \"$(dirname \"%k\")\" && ./SitePack.sh"
+Icon=applications-internet
+Terminal=false
+Categories=Network;WebBrowser;Utility;
+StartupNotify=true

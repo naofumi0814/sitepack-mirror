@@ -38,31 +38,33 @@ class PathRewriter:
     def compute_save_path(self, url: str) -> Path:
         """Determine the local file path where *url* should be saved.
 
+        The returned path is **relative to the project directory**.
+
         Rules
         -----
         * **Same-host HTML pages** are stored under ``pages/`` (with the
-          root page going to ``index.html`` at the output root).
+          root page going to ``index.html`` at the project root).
         * **Same-host assets** go to ``assets/``.
         * **External assets** go to ``external/<host>/``.
         """
         parsed = urlparse(url)
-        base_host = urlparse(self._config.start_url).netloc
-        output_dir: Path = self._config.output_dir
+        base_netloc = urlparse(self._config.start_url).netloc.lower()
+        url_netloc = parsed.netloc.lower()
 
-        is_same_host = parsed.netloc == base_host or parsed.netloc == ""
-        safe_name = self._normalizer.url_to_filepath(url, base_host)
+        is_same_host = url_netloc == base_netloc or url_netloc == ""
+        relative = self._normalizer.url_to_relative_path(url)
 
         if is_same_host:
             if self._is_html_url(url):
-                # Root page -> index.html at output root
+                # Root page -> index.html at project root
                 if self._is_root_url(url):
-                    return output_dir / "index.html"
-                return output_dir / "pages" / safe_name
-            return output_dir / "assets" / safe_name
+                    return Path("index.html")
+                return Path("pages") / relative
+            return Path("assets") / relative
 
         # External asset – namespaced by host
-        external_host = parsed.netloc or "unknown"
-        return output_dir / "external" / external_host / safe_name
+        external_host = parsed.hostname or parsed.netloc or "unknown"
+        return Path("external") / external_host / relative
 
     def compute_relative_path(self, from_file: Path, to_file: Path) -> str:
         """Return a POSIX relative path string from *from_file* to *to_file*.
@@ -101,12 +103,14 @@ class PathRewriter:
         """Build a mapping of ``{original_url: relative_local_path}``
         relative to *from_file*'s directory.
 
-        Uses :pyattr:`state.url_map` (``{url: local_path_str}``) as the
-        authoritative source of downloaded URLs.
+        Uses :pyattr:`state.url_map` (``{url: relative_local_path_str}``) as
+        the authoritative source of downloaded URLs.  Stored paths are
+        relative to ``project_dir`` and resolved against it here.
         """
         url_map: dict[str, str] = {}
+        project_dir = self._state.project_dir
         for original_url, local_path_str in self._state.url_map.items():
-            local_path = Path(local_path_str)
+            local_path = project_dir / local_path_str
             if not local_path.exists():
                 logger.debug(
                     "Skipping URL map entry (file missing): %s -> %s",
@@ -210,7 +214,8 @@ class PathRewriter:
             return True
 
         # Fallback: check if state already recorded a content type
-        content_type = self._state.content_types.get(url, "")
+        content_types = getattr(self._state, "content_types", {})
+        content_type = content_types.get(url, "")
         if "text/html" in content_type:
             return True
 

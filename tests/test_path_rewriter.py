@@ -31,8 +31,10 @@ class TestComputeSavePath:
         rw = _make_rewriter(tmp_path)
         path = rw.compute_save_path("https://example.com/")
         assert path.name == "index.html"
-        # Root page lands at the output root, not under pages/
-        assert "pages" not in str(path.relative_to(tmp_path / "output"))
+        # Root page lands at the project root, not under pages/
+        assert "pages" not in str(path)
+        # Returned path is relative to project_dir (not absolute)
+        assert not path.is_absolute()
 
     def test_compute_save_path_same_host_page(self, tmp_path: Path) -> None:
         rw = _make_rewriter(tmp_path)

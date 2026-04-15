@@ -215,26 +215,18 @@ class UrlNormalizer:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def url_to_filepath(url: str, base_host: str) -> Path:
-        """Convert a URL to a safe, deterministic filesystem path.
+    def url_to_relative_path(url: str) -> Path:
+        """Convert a URL's path component to a safe relative filesystem path.
 
-        * The *base_host* is used to decide whether the file belongs
-          under ``pages/`` (same host) or ``external/``.
+        Returns just the inner path (no ``pages/`` / ``external/<host>/``
+        prefix); the caller decides which root directory it belongs in.
+
         * Query strings are represented as a short hash suffix.
         * Extension-less paths are stored as ``<path>/index.html``.
-
-        Returns a relative ``Path`` (no leading slash) rooted at the
-        project directory.
+        * Unsafe characters are replaced with ``_``.
         """
         parsed = urlparse(url)
-        host = (parsed.hostname or "unknown").lower()
         path = parsed.path or "/"
-
-        # Determine root folder
-        if host == base_host.lower():
-            root = "pages"
-        else:
-            root = f"external/{host}"
 
         # Clean and split the path
         path = re.sub(r"/{2,}", "/", path)
@@ -247,30 +239,47 @@ class UrlNormalizer:
             query_suffix = f"_q{query_hash}"
 
         if not path:
-            # Root page
-            return Path(root) / f"index{query_suffix}.html"
+            return Path(f"index{query_suffix}.html")
 
         parts = path.split("/")
         last = parts[-1]
 
-        # Check if the last segment has an extension
         if "." in last:
             name, ext = last.rsplit(".", 1)
-            # Sanitise the filename
             safe_name = _UNSAFE_FILENAME_RE.sub("_", name)
             filename = f"{safe_name}{query_suffix}.{ext}"
-        else:
-            # No extension — treat as directory and use index.html
-            safe_last = _UNSAFE_FILENAME_RE.sub("_", last)
-            parts[-1] = safe_last
-            filename = f"index{query_suffix}.html"
-            return Path(root, *parts) / filename
+            if len(parts) > 1:
+                directories = [_UNSAFE_FILENAME_RE.sub("_", p) for p in parts[:-1]]
+                return Path(*directories) / filename
+            return Path(filename)
 
-        if len(parts) > 1:
-            directories = [_UNSAFE_FILENAME_RE.sub("_", p) for p in parts[:-1]]
-            return Path(root, *directories) / filename
+        # No extension — treat as directory and use index.html
+        safe_parts = [_UNSAFE_FILENAME_RE.sub("_", p) for p in parts]
+        filename = f"index{query_suffix}.html"
+        return Path(*safe_parts) / filename
 
-        return Path(root) / filename
+    @classmethod
+    def url_to_filepath(cls, url: str, base_host: str) -> Path:
+        """Convert a URL to a safe deterministic filesystem path *with* a
+        ``pages/`` (same host) or ``external/<host>/`` (other host) root.
+
+        ``base_host`` is matched against the URL's ``netloc`` (case
+        insensitive); both sides may include a port.
+
+        Provided for backward compatibility with callers that want the
+        full namespaced path.  New code should prefer
+        :meth:`url_to_relative_path` and add its own root.
+        """
+        parsed = urlparse(url)
+        netloc = (parsed.netloc or "unknown").lower()
+        base = (base_host or "").lower()
+
+        relative = cls.url_to_relative_path(url)
+
+        if netloc == base:
+            return Path("pages") / relative
+        host_for_dir = parsed.hostname or netloc or "unknown"
+        return Path("external") / host_for_dir / relative
 
     # ------------------------------------------------------------------
     # Tracking-parameter removal
