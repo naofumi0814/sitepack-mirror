@@ -147,8 +147,15 @@ class HtmlParser:
         url_map: dict[str, str],
         base_url: str,
     ) -> str:
-        """Return *html* with all asset/link URLs replaced per *url_map*."""
+        """Return *html* with all asset/link URLs replaced per *url_map*.
+
+        Also updates charset declarations to UTF-8 so that browsers display
+        the UTF-8 encoded output correctly, regardless of the source charset.
+        """
         soup = BeautifulSoup(html, "lxml")
+
+        # Fix charset declaration first so any <base> handling is correct
+        self._fix_charset_to_utf8(soup)
 
         self._rewrite_a_hrefs(soup, url_map, base_url)
         self._rewrite_img_tags(soup, url_map, base_url)
@@ -158,6 +165,7 @@ class HtmlParser:
         self._rewrite_source_tags(soup, url_map, base_url)
         self._rewrite_video_posters(soup, url_map, base_url)
         self._rewrite_inline_styles(soup, url_map, base_url)
+        self._rewrite_frame_tags(soup, url_map, base_url)
 
         return str(soup)
 
@@ -414,6 +422,42 @@ class HtmlParser:
             style_val = tag["style"]
             if isinstance(style_val, str) and "url(" in style_val:
                 tag["style"] = self._rewrite_css_urls(style_val, url_map, base_url)
+
+    @staticmethod
+    def _fix_charset_to_utf8(soup: BeautifulSoup) -> None:
+        """Update any charset declarations in *soup* to UTF-8.
+
+        Called before writing HTML to disk so that the browser reads the
+        UTF-8 encoded file with the correct charset, regardless of the
+        original encoding of the source page (e.g. Shift-JIS).
+        """
+        # <meta charset="Shift_JIS"> → <meta charset="UTF-8">
+        for tag in soup.find_all("meta", charset=True):
+            tag["charset"] = "UTF-8"
+
+        # <meta http-equiv="Content-Type" content="text/html; charset=Shift_JIS">
+        for tag in soup.find_all(
+            "meta",
+            attrs={"http-equiv": re.compile(r"^content-type$", re.IGNORECASE)},
+        ):
+            content_val = tag.get("content", "")
+            if isinstance(content_val, str) and "charset" in content_val.lower():
+                tag["content"] = re.sub(
+                    r"charset\s*=\s*[^\s;\"']+",
+                    "charset=UTF-8",
+                    content_val,
+                    flags=re.IGNORECASE,
+                )
+
+    def _rewrite_frame_tags(
+        self,
+        soup: BeautifulSoup,
+        url_map: dict[str, str],
+        base_url: str,
+    ) -> None:
+        """Rewrite ``src`` attributes on ``<frame>`` and ``<iframe>`` elements."""
+        for tag in soup.find_all(["frame", "iframe"], src=True):
+            self._rewrite_attr(tag, "src", url_map, base_url)
 
     @staticmethod
     def _rewrite_css_urls(

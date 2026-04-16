@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlparse
@@ -16,6 +17,69 @@ from sitepack.core.config import AppConfig
 from sitepack.core.project_state import ProjectState
 
 logger = logging.getLogger(__name__)
+
+# Encoding names that map to Windows Shift-JIS (cp932) — a superset of
+# strict Shift-JIS that handles the extra characters used by many Japanese sites.
+_SHIFT_JIS_ALIASES: frozenset[str] = frozenset({
+    "shiftjis", "shift-jis", "sjis", "xsjis", "mskanji", "csshiftjis",
+    "shiftjis2004", "shiftjisx0213",
+})
+
+
+def _decode_html_bytes(content: bytes, content_type_header: str) -> str:
+    """Decode raw HTML bytes to a Unicode string using the correct charset.
+
+    Priority:
+    1. ``charset`` from the HTTP ``Content-Type`` header.
+    2. ``charset`` detected from ``<meta>`` tags in the first 4 KB.
+    3. httpx / charset_normalizer auto-detection (fallback).
+    """
+    # 1. Try charset from Content-Type header
+    ct_charset = _charset_from_header(content_type_header)
+    if ct_charset:
+        enc = _normalize_encoding(ct_charset)
+        try:
+            return content.decode(enc)
+        except (UnicodeDecodeError, LookupError):
+            logger.debug("Content-Type charset %r failed; trying meta detection.", enc)
+
+    # 2. Try charset from HTML <meta> tags
+    meta_charset = _charset_from_html_bytes(content[:4096])
+    if meta_charset:
+        enc = _normalize_encoding(meta_charset)
+        try:
+            return content.decode(enc)
+        except (UnicodeDecodeError, LookupError):
+            logger.debug("Meta charset %r failed; falling back to auto.", enc)
+
+    # 3. Fall back: let httpx / charset_normalizer guess
+    r = httpx.Response(200, content=content,
+                       headers={"content-type": content_type_header or "text/html"})
+    return r.text
+
+
+def _charset_from_header(content_type: str) -> str | None:
+    """Extract charset from a Content-Type header string."""
+    if not content_type:
+        return None
+    m = re.search(r"charset\s*=\s*([^\s;,\"']+)", content_type, re.IGNORECASE)
+    return m.group(1) if m else None
+
+
+def _charset_from_html_bytes(data: bytes) -> str | None:
+    """Extract charset from HTML <meta> tags encoded in *data* (raw bytes)."""
+    # Decode as ASCII so we can read the ASCII parts of any encoding
+    head = data.decode("ascii", errors="replace")
+    m = re.search(r"charset\s*=\s*[\"' ]?([^\"'\\s>;]+)", head, re.IGNORECASE)
+    return m.group(1) if m else None
+
+
+def _normalize_encoding(enc: str) -> str:
+    """Map Shift-JIS variant names to Python's ``cp932`` codec."""
+    key = enc.lower().replace("-", "").replace("_", "").replace(" ", "")
+    if key in _SHIFT_JIS_ALIASES:
+        return "cp932"
+    return enc
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,11 +170,16 @@ class AssetDownloader:
                     content_type,
                 )
 
+                # Use smart charset detection so Shift-JIS and other
+                # non-UTF-8 pages are decoded correctly even when the
+                # server omits the charset from the Content-Type header.
+                text = _decode_html_bytes(response.content, content_type)
+
                 return FetchResult(
                     url=str(response.url),
                     status_code=response.status_code,
                     content_type=content_type,
-                    text=response.text,
+                    text=text,
                     headers=headers,
                 )
             except httpx.HTTPStatusError as exc:

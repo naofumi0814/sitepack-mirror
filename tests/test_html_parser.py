@@ -148,6 +148,62 @@ class TestInlineStyleAssets:
         assert any("b.png" in u for u in asset_urls)
 
 
+class TestCharsetFix:
+    """rewrite_urls must update charset declarations to UTF-8."""
+
+    def test_meta_charset_updated(self) -> None:
+        html = '<html><head><meta charset="Shift_JIS"></head><body></body></html>'
+        result = _make_parser().rewrite_urls(html, {}, BASE_URL)
+        assert 'charset="UTF-8"' in result or "charset=UTF-8" in result
+        assert "Shift_JIS" not in result
+
+    def test_meta_http_equiv_charset_updated(self) -> None:
+        html = (
+            '<html><head>'
+            '<meta http-equiv="Content-Type" content="text/html; charset=Shift_JIS">'
+            '</head><body></body></html>'
+        )
+        result = _make_parser().rewrite_urls(html, {}, BASE_URL)
+        assert "Shift_JIS" not in result
+        assert "UTF-8" in result
+
+    def test_no_charset_tag_unchanged(self) -> None:
+        html = '<html><head><title>Test</title></head><body><p>Hello</p></body></html>'
+        result = _make_parser().rewrite_urls(html, {}, BASE_URL)
+        assert "Hello" in result
+
+
+class TestFrameRewriting:
+    """frame[src] and iframe[src] must be rewritten to local paths."""
+
+    def test_frame_src_rewritten(self) -> None:
+        html = (
+            '<html><frameset>'
+            '<frame src="/menu.html" name="left">'
+            '<frame src="/main.html" name="right">'
+            '</frameset></html>'
+        )
+        url_map = {
+            "https://example.com/menu.html": "pages/menu.html",
+            "https://example.com/main.html": "pages/main.html",
+        }
+        result = _make_parser().rewrite_urls(html, url_map, BASE_URL)
+        assert "pages/menu.html" in result
+        assert "pages/main.html" in result
+
+    def test_iframe_src_rewritten(self) -> None:
+        html = '<html><body><iframe src="/embed/content"></iframe></body></html>'
+        url_map = {"https://example.com/embed/content": "pages/embed/content/index.html"}
+        result = _make_parser().rewrite_urls(html, url_map, BASE_URL)
+        assert "pages/embed/content/index.html" in result
+
+    def test_frame_external_src_unchanged(self) -> None:
+        html = '<html><frameset><frame src="https://other.com/page"></frameset></html>'
+        url_map = {}
+        result = _make_parser().rewrite_urls(html, url_map, BASE_URL)
+        assert "https://other.com/page" in result
+
+
 class TestRewriteUrls:
     """Tests for HtmlParser.rewrite_urls()."""
 
