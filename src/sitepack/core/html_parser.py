@@ -18,6 +18,58 @@ logger = logging.getLogger(__name__)
 _SKIP_SCHEMES = frozenset({"mailto", "tel", "javascript", "data"})
 
 
+# ---------------------------------------------------------------------------
+# Charset helpers (regex-only, no BeautifulSoup round-trip)
+# ---------------------------------------------------------------------------
+
+# ``<meta charset="Shift_JIS">`` — whole tag, any quote style
+_META_CHARSET_RE = re.compile(
+    r"""(<meta[^>]*?\bcharset\s*=\s*)(['"]?)([^'"\s/>]+)(\2)""",
+    re.IGNORECASE,
+)
+
+# ``<meta http-equiv="Content-Type" content="text/html; charset=Shift_JIS">``
+_META_HTTP_EQUIV_RE = re.compile(
+    r"""(<meta[^>]*?\bhttp-equiv\s*=\s*['"]?content-type['"]?[^>]*?\bcontent\s*=\s*)(['"])([^'"]*?)(\2)""",
+    re.IGNORECASE,
+)
+
+_CONTENT_CHARSET_RE = re.compile(r"charset\s*=\s*[A-Za-z0-9_\-.:]+", re.IGNORECASE)
+
+
+def fix_charset_to_utf8(html: str) -> str:
+    """Rewrite any charset declaration in *html* to ``UTF-8``.
+
+    This is a pure regex implementation — safe to call on raw HTML before
+    BeautifulSoup parsing so that any file written to disk at *any* stage of
+    the pipeline already declares UTF-8 to the browser.
+
+    Handles both common forms:
+
+    * ``<meta charset="Shift_JIS">``
+    * ``<meta http-equiv="Content-Type" content="text/html; charset=Shift_JIS">``
+    """
+    if not html:
+        return html
+
+    def _replace_charset(m: re.Match[str]) -> str:
+        prefix, quote, _old, close = m.group(1), m.group(2), m.group(3), m.group(4)
+        return f"{prefix}{quote}UTF-8{close}"
+
+    def _replace_http_equiv(m: re.Match[str]) -> str:
+        prefix, quote, content, close = m.group(1), m.group(2), m.group(3), m.group(4)
+        new_content = _CONTENT_CHARSET_RE.sub("charset=UTF-8", content)
+        if "charset" not in new_content.lower():
+            # Preserve explicit declaration if server/page omitted charset
+            sep = "; " if new_content and not new_content.rstrip().endswith(";") else " "
+            new_content = f"{new_content.rstrip()}{sep}charset=UTF-8"
+        return f"{prefix}{quote}{new_content}{close}"
+
+    result = _META_CHARSET_RE.sub(_replace_charset, html)
+    result = _META_HTTP_EQUIV_RE.sub(_replace_http_equiv, result)
+    return result
+
+
 @dataclass(frozen=True, slots=True)
 class AssetRef:
     """A reference to an external asset discovered in HTML or CSS."""
@@ -152,10 +204,11 @@ class HtmlParser:
         Also updates charset declarations to UTF-8 so that browsers display
         the UTF-8 encoded output correctly, regardless of the source charset.
         """
-        soup = BeautifulSoup(html, "lxml")
+        # Fix charset first so BeautifulSoup's serialization doesn't try to
+        # re-encode using the original charset declaration.
+        html = fix_charset_to_utf8(html)
 
-        # Fix charset declaration first so any <base> handling is correct
-        self._fix_charset_to_utf8(soup)
+        soup = BeautifulSoup(html, "lxml")
 
         self._rewrite_a_hrefs(soup, url_map, base_url)
         self._rewrite_img_tags(soup, url_map, base_url)
@@ -167,7 +220,9 @@ class HtmlParser:
         self._rewrite_inline_styles(soup, url_map, base_url)
         self._rewrite_frame_tags(soup, url_map, base_url)
 
-        return str(soup)
+        # Serialize back.  Run charset fix a second time in case BeautifulSoup
+        # normalized the meta tag in a way that bypassed the first pass.
+        return fix_charset_to_utf8(str(soup))
 
     # ------------------------------------------------------------------
     # Extraction helpers
@@ -422,32 +477,6 @@ class HtmlParser:
             style_val = tag["style"]
             if isinstance(style_val, str) and "url(" in style_val:
                 tag["style"] = self._rewrite_css_urls(style_val, url_map, base_url)
-
-    @staticmethod
-    def _fix_charset_to_utf8(soup: BeautifulSoup) -> None:
-        """Update any charset declarations in *soup* to UTF-8.
-
-        Called before writing HTML to disk so that the browser reads the
-        UTF-8 encoded file with the correct charset, regardless of the
-        original encoding of the source page (e.g. Shift-JIS).
-        """
-        # <meta charset="Shift_JIS"> → <meta charset="UTF-8">
-        for tag in soup.find_all("meta", charset=True):
-            tag["charset"] = "UTF-8"
-
-        # <meta http-equiv="Content-Type" content="text/html; charset=Shift_JIS">
-        for tag in soup.find_all(
-            "meta",
-            attrs={"http-equiv": re.compile(r"^content-type$", re.IGNORECASE)},
-        ):
-            content_val = tag.get("content", "")
-            if isinstance(content_val, str) and "charset" in content_val.lower():
-                tag["content"] = re.sub(
-                    r"charset\s*=\s*[^\s;\"']+",
-                    "charset=UTF-8",
-                    content_val,
-                    flags=re.IGNORECASE,
-                )
 
     def _rewrite_frame_tags(
         self,

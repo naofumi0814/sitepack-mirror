@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sitepack.core.html_parser import HtmlParser
+from sitepack.core.html_parser import HtmlParser, fix_charset_to_utf8
 
 BASE_URL = "https://example.com/"
 
@@ -202,6 +202,102 @@ class TestFrameRewriting:
         url_map = {}
         result = _make_parser().rewrite_urls(html, url_map, BASE_URL)
         assert "https://other.com/page" in result
+
+
+class TestFixCharsetToUtf8:
+    """Pure-regex charset fix that runs at save time AND during rewrite."""
+
+    def test_meta_charset_lowercase_shift_jis(self) -> None:
+        html = '<html><head><meta charset="shift_jis"></head><body></body></html>'
+        result = fix_charset_to_utf8(html)
+        assert 'charset="UTF-8"' in result
+        assert "shift_jis" not in result.lower() or "charset=\"UTF-8\"" in result
+
+    def test_meta_http_equiv_content_type(self) -> None:
+        html = (
+            '<html><head>'
+            '<meta http-equiv="Content-Type" content="text/html; charset=Shift_JIS">'
+            '</head><body></body></html>'
+        )
+        result = fix_charset_to_utf8(html)
+        assert "charset=UTF-8" in result
+        assert "Shift_JIS" not in result
+
+    def test_meta_charset_single_quotes(self) -> None:
+        html = "<html><head><meta charset='EUC-JP'></head></html>"
+        result = fix_charset_to_utf8(html)
+        assert "UTF-8" in result
+        assert "EUC-JP" not in result
+
+    def test_preserves_non_charset_content(self) -> None:
+        html = '<html><head><title>タイトル</title></head><body><p>本文</p></body></html>'
+        result = fix_charset_to_utf8(html)
+        assert "タイトル" in result
+        assert "本文" in result
+
+    def test_multiple_meta_tags_all_updated(self) -> None:
+        html = (
+            '<html><head>'
+            '<meta charset="Shift_JIS">'
+            '<meta http-equiv="Content-Type" content="text/html; charset=Shift_JIS">'
+            '</head><body></body></html>'
+        )
+        result = fix_charset_to_utf8(html)
+        assert "Shift_JIS" not in result
+        assert result.count("UTF-8") >= 2
+
+    def test_no_charset_declarations_unchanged(self) -> None:
+        html = '<html><head><title>hello</title></head><body></body></html>'
+        result = fix_charset_to_utf8(html)
+        assert result == html
+
+
+class TestRewriteUrlsAppliesCharsetFix:
+    """rewrite_urls must always emit UTF-8 charset, even with BS4 round-trip."""
+
+    def test_lowercase_shift_jis_converted(self) -> None:
+        html = '<html><head><meta charset="shift_jis"></head><body></body></html>'
+        result = _make_parser().rewrite_urls(html, {}, BASE_URL)
+        # Accept either quoted or unquoted form, just not the original
+        assert "shift_jis" not in result.lower() or "utf-8" in result.lower()
+        assert "UTF-8" in result or "utf-8" in result.lower()
+
+    def test_japanese_content_preserved(self) -> None:
+        html = (
+            '<html><head>'
+            '<meta http-equiv="Content-Type" content="text/html; charset=Shift_JIS">'
+            '<title>阿部寛のホームページ</title>'
+            '</head><body><h1>阿部寛</h1></body></html>'
+        )
+        result = _make_parser().rewrite_urls(html, {}, BASE_URL)
+        assert "阿部寛" in result
+        assert "Shift_JIS" not in result
+
+
+class TestHtmExtensionFrameSite:
+    """Simulate abehiroshi-style sites that use .htm frames + Shift-JIS."""
+
+    def test_frameset_htm_links_rewritten(self) -> None:
+        html = (
+            '<html><head>'
+            '<meta http-equiv="Content-Type" content="text/html; charset=Shift_JIS">'
+            '<title>阿部寛のホームページ</title>'
+            '</head>'
+            '<frameset cols="200,*">'
+            '<frame src="menu.htm" name="left">'
+            '<frame src="top.htm" name="right">'
+            '</frameset></html>'
+        )
+        base_url = "https://abehiroshi.la.coocan.jp/"
+        url_map = {
+            "https://abehiroshi.la.coocan.jp/menu.htm": "pages/menu.htm",
+            "https://abehiroshi.la.coocan.jp/top.htm": "pages/top.htm",
+        }
+        result = _make_parser().rewrite_urls(html, url_map, base_url)
+        assert "pages/menu.htm" in result
+        assert "pages/top.htm" in result
+        assert "UTF-8" in result
+        assert "阿部寛" in result
 
 
 class TestRewriteUrls:

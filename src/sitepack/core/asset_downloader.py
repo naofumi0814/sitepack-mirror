@@ -67,10 +67,25 @@ def _charset_from_header(content_type: str) -> str | None:
 
 
 def _charset_from_html_bytes(data: bytes) -> str | None:
-    """Extract charset from HTML <meta> tags encoded in *data* (raw bytes)."""
-    # Decode as ASCII so we can read the ASCII parts of any encoding
-    head = data.decode("ascii", errors="replace")
-    m = re.search(r"charset\s*=\s*[\"' ]?([^\"'\\s>;]+)", head, re.IGNORECASE)
+    """Extract charset from HTML <meta> tags encoded in *data* (raw bytes).
+
+    Handles both forms commonly found in legacy Japanese pages:
+
+    * ``<meta charset="Shift_JIS">``
+    * ``<meta http-equiv="Content-Type" content="text/html; charset=Shift_JIS">``
+    """
+    # Decode as Latin-1 so bytes above 127 survive without ASCII-replacement
+    # errors.  We only care about the ASCII-safe meta-tag portion anyway.
+    head = data.decode("latin-1", errors="replace")
+    # Use a character class WITHOUT escaping '\s' twice — previously the raw
+    # string contained ``\\s`` which under ``re.IGNORECASE`` excluded both
+    # ``s`` and ``S``, causing detection to silently fail for *every* charset
+    # starting with the letter S (Shift_JIS, Shift-JIS, …).
+    pattern = re.compile(
+        r"""charset\s*=\s*['"]?([A-Za-z0-9_\-.:]+)""",
+        re.IGNORECASE,
+    )
+    m = pattern.search(head)
     return m.group(1) if m else None
 
 

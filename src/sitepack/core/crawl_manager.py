@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 from sitepack.core.asset_downloader import AssetDownloader
 from sitepack.core.config import AppConfig
 from sitepack.core.css_parser import CssAssetParser
-from sitepack.core.html_parser import HtmlParser
+from sitepack.core.html_parser import HtmlParser, fix_charset_to_utf8
 from sitepack.core.path_rewriter import PathRewriter
 from sitepack.core.project_state import ProjectState
 from sitepack.core.url_normalizer import UrlNormalizer
@@ -27,6 +27,13 @@ logger = logging.getLogger(__name__)
 # Interval (in number of processed URLs) between automatic state saves
 # during the crawl loop.  Keeps progress durable without excessive I/O.
 _STATE_SAVE_INTERVAL: int = 25
+
+# File suffixes that should be treated as HTML during post-crawl URL
+# rewriting.  Keeping this aligned with ``PathRewriter._is_html_url`` ensures
+# that every file we saved as an HTML page gets its links rewritten.
+_HTML_SUFFIXES: frozenset[str] = frozenset({
+    ".html", ".htm", ".php", ".asp", ".aspx", ".jsp", ".cgi", ".shtml", ".xhtml",
+})
 
 
 class CrawlManager:
@@ -246,10 +253,14 @@ class CrawlManager:
         parse_result = self._html_parser.parse(result_text, actual_url)
 
         # ----- Save raw HTML (will be rewritten in the finalize step) -----
+        # Fix charset declarations at save time so the file is viewable as
+        # UTF-8 immediately, even if the crawl is interrupted before the
+        # final rewrite pass runs.
+        save_text = fix_charset_to_utf8(result_text)
         save_path = self._rewriter.compute_save_path(url)
         full_save = self._state.project_dir / save_path
         full_save.parent.mkdir(parents=True, exist_ok=True)
-        full_save.write_text(result_text, encoding="utf-8")
+        full_save.write_text(save_text, encoding="utf-8")
 
         self._state.add_visited(url, str(save_path))
 
@@ -408,13 +419,18 @@ class CrawlManager:
             if not full_path.exists():
                 continue
 
+            # Use pathlib's suffix so we handle every HTML-ish extension
+            # (.htm, .php, .asp, …) — abehiroshi-style frame pages use
+            # ``.htm`` and were previously skipped entirely.
+            suffix = Path(local_path).suffix.lower()
+
             try:
-                if local_path.endswith(".html") or local_path.endswith("/index.html"):
+                if suffix in _HTML_SUFFIXES:
                     content = full_path.read_text(encoding="utf-8", errors="replace")
                     rewritten = self._rewriter.rewrite_html(content, url, full_path)
                     full_path.write_text(rewritten, encoding="utf-8")
                     rewritten_count += 1
-                elif local_path.endswith(".css"):
+                elif suffix == ".css":
                     content = full_path.read_text(encoding="utf-8", errors="replace")
                     rewritten = self._rewriter.rewrite_css(content, url, full_path)
                     full_path.write_text(rewritten, encoding="utf-8")
