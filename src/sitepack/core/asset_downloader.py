@@ -41,7 +41,7 @@ class AssetDownloader:
         self._state = state
         self._client: httpx.AsyncClient | None = None
         self._semaphore: asyncio.Semaphore = asyncio.Semaphore(
-            getattr(config, "max_concurrency", 5)
+            config.concurrency
         )
         self._robots_cache: dict[str, RobotFileParser] = {}
         self._last_request_time: float = 0.0

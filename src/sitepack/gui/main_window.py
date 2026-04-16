@@ -817,7 +817,8 @@ class MainWindow(QMainWindow):
         if project_dir is None:
             return
 
-        index_path = project_dir / "pages" / "index.html"
+        # Root page is saved as project_dir/index.html (not pages/index.html)
+        index_path = project_dir / "index.html"
         if not index_path.is_file():
             # Fall back to just opening the directory
             index_path = project_dir

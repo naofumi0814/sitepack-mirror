@@ -117,6 +117,12 @@ class HtmlParser:
         soup = BeautifulSoup(html, "lxml")
         result = ParseResult()
 
+        # Honour <base href="..."> if present — it overrides the page URL
+        # for resolving all relative URLs on the page.
+        base_tag = soup.find("base", href=True)
+        if base_tag:
+            base_url = urljoin(base_url, base_tag["href"])
+
         # Page title
         title_tag = soup.find("title")
         if title_tag and title_tag.string:
@@ -165,10 +171,34 @@ class HtmlParser:
         base_url: str,
         result: ParseResult,
     ) -> None:
+        # Standard <a href="..."> links
         for tag in soup.find_all("a", href=True):
             resolved = _resolve_url(tag["href"], base_url)
             if resolved is not None:
                 result.links.append(resolved)
+
+        # Image-map <area href="..."> links
+        for tag in soup.find_all("area", href=True):
+            resolved = _resolve_url(tag["href"], base_url)
+            if resolved is not None:
+                result.links.append(resolved)
+
+        # <iframe src="..."> and <frame src="..."> — framed sub-pages
+        for tag_name in ("iframe", "frame"):
+            for tag in soup.find_all(tag_name, src=True):
+                resolved = _resolve_url(tag["src"], base_url)
+                if resolved is not None:
+                    result.links.append(resolved)
+
+        # <meta http-equiv="refresh" content="...;url=..."> redirects
+        for tag in soup.find_all("meta", attrs={"http-equiv": re.compile(r"^refresh$", re.IGNORECASE)}):
+            content = tag.get("content", "")
+            if isinstance(content, str):
+                match = re.search(r"url\s*=\s*['\"]?\s*([^'\";\s]+)", content, re.IGNORECASE)
+                if match:
+                    resolved = _resolve_url(match.group(1), base_url)
+                    if resolved is not None:
+                        result.links.append(resolved)
 
     def _extract_assets(
         self,
@@ -230,6 +260,7 @@ class HtmlParser:
         base_url: str,
         result: ParseResult,
     ) -> None:
+        # <style> blocks
         for style_tag in soup.find_all("style"):
             css_text = style_tag.string
             if not css_text:
@@ -239,6 +270,24 @@ class HtmlParser:
                 result.assets.extend(css_assets)
             except Exception:
                 logger.warning("Failed to parse inline <style> in %s", base_url, exc_info=True)
+
+        # Inline style="..." attributes (e.g. background-image: url(...))
+        for tag in soup.find_all(style=True):
+            style_val = tag.get("style", "")
+            if not isinstance(style_val, str) or "url(" not in style_val:
+                continue
+            for match in _CSS_URL_RE.finditer(style_val):
+                raw_url = match.group("url")
+                resolved = _resolve_url(raw_url, base_url)
+                if resolved is not None:
+                    result.assets.append(
+                        AssetRef(
+                            url=resolved,
+                            asset_type="image",
+                            source_tag=tag.name,
+                            source_attr="style",
+                        )
+                    )
 
     @staticmethod
     def _add_asset(

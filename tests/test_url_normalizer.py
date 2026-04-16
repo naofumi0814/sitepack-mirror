@@ -165,6 +165,30 @@ class TestUrlToFilepath:
         assert "cdn.other.com" in str(result)
 
 
+class TestTrailingSlashPreservation:
+    """Trailing slashes on non-root paths must be preserved because they
+    change how ``urljoin`` resolves relative URLs.  ``/blog/`` and
+    ``/blog`` are distinct resources on many servers."""
+
+    def test_non_root_trailing_slash_preserved(self) -> None:
+        result = UrlNormalizer.normalize("https://example.com/blog/")
+        assert result.endswith("/blog/")
+
+    def test_non_root_without_trailing_slash(self) -> None:
+        result = UrlNormalizer.normalize("https://example.com/blog")
+        assert result.endswith("/blog")
+        assert not result.endswith("/blog/")
+
+    def test_root_slash_still_consistent(self) -> None:
+        a = UrlNormalizer.normalize("https://example.com/")
+        b = UrlNormalizer.normalize("https://example.com")
+        assert a == b
+
+    def test_deep_path_trailing_slash_preserved(self) -> None:
+        result = UrlNormalizer.normalize("https://example.com/a/b/c/")
+        assert result.endswith("/a/b/c/")
+
+
 class TestStripTrackingParams:
     """Tests for UrlNormalizer.strip_tracking_params()."""
 

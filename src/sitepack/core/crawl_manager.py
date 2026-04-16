@@ -215,6 +215,7 @@ class CrawlManager:
         assert self._rewriter is not None
 
         # ----- Fetch -----
+        actual_url = url  # may differ from *url* after redirects
         if self._config.use_renderer:
             html = await self._downloader.fetch_with_renderer(url)
             if html is None:
@@ -229,13 +230,20 @@ class CrawlManager:
                 return
             result_text = result.text
             content_type = result.content_type
+            actual_url = result.url  # final URL after redirects
 
         if "text/html" not in content_type:
             logger.debug("Skipping non-HTML response: %s (%s)", url, content_type)
+            # Mark as visited so we don't re-fetch on subsequent encounters
+            self._state.visited_urls.add(url)
+            if actual_url != url:
+                self._state.visited_urls.add(actual_url)
             return
 
         # ----- Parse HTML -----
-        parse_result = self._html_parser.parse(result_text, url)
+        # Use *actual_url* (after redirects, with trailing slash intact) as the
+        # base for resolving relative links — this is critical for correctness.
+        parse_result = self._html_parser.parse(result_text, actual_url)
 
         # ----- Save raw HTML (will be rewritten in the finalize step) -----
         save_path = self._rewriter.compute_save_path(url)
@@ -244,6 +252,13 @@ class CrawlManager:
         full_save.write_text(result_text, encoding="utf-8")
 
         self._state.add_visited(url, str(save_path))
+
+        # If the server redirected, also mark the final URL as visited so that
+        # links pointing to the canonical URL don't trigger another fetch.
+        if actual_url != url:
+            normalized_actual = self._normalizer.normalize(actual_url)
+            if normalized_actual and normalized_actual != url:
+                self._state.add_visited(normalized_actual, str(save_path))
 
         # ----- Queue discovered links -----
         self._enqueue_discovered_links(parse_result.links, url, depth)

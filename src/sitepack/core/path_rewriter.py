@@ -200,23 +200,22 @@ class PathRewriter:
 
         # Explicitly non-HTML extensions
         non_html_extensions = {
-            ".css", ".js", ".json", ".xml", ".png", ".jpg", ".jpeg",
+            ".css", ".js", ".mjs", ".json", ".xml", ".png", ".jpg", ".jpeg",
             ".gif", ".svg", ".ico", ".webp", ".avif", ".woff", ".woff2",
             ".ttf", ".otf", ".eot", ".mp4", ".webm", ".mp3", ".ogg",
             ".wav", ".pdf", ".zip", ".gz", ".tar", ".br", ".map",
+            ".csv", ".wasm", ".bmp", ".tiff",
         }
         suffix = Path(path).suffix.lower()
         if suffix in non_html_extensions:
             return False
 
-        # Treat paths ending in .html/.htm or with no extension as HTML
-        if suffix in {".html", ".htm", ""}:
-            return True
-
-        # Fallback: check if state already recorded a content type
-        content_types = getattr(self._state, "content_types", {})
-        content_type = content_types.get(url, "")
-        if "text/html" in content_type:
+        # HTML, server-side page extensions, and extension-less paths
+        html_like_extensions = {
+            ".html", ".htm", ".php", ".asp", ".aspx", ".jsp",
+            ".cgi", ".shtml", ".xhtml", "",
+        }
+        if suffix in html_like_extensions:
             return True
 
         return False

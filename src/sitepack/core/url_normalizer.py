@@ -99,8 +99,9 @@ class UrlNormalizer:
             netloc = f"{hostname}:{port}"
 
         # Collapse consecutive slashes and normalize the path
-        path = parsed.path or "/"
-        path = re.sub(r"/{2,}", "/", path)
+        original_path = parsed.path or "/"
+        path = re.sub(r"/{2,}", "/", original_path)
+        had_trailing_slash = path.endswith("/") and len(path) > 1
         path = posixpath.normpath(path)
         # posixpath.normpath strips the trailing slash; keep root as "/"
         if path == ".":
@@ -108,6 +109,10 @@ class UrlNormalizer:
         # Ensure leading slash
         if not path.startswith("/"):
             path = "/" + path
+        # Preserve trailing slash — it affects relative URL resolution
+        # (urljoin treats /blog/ and /blog differently).
+        if had_trailing_slash and not path.endswith("/"):
+            path = path + "/"
 
         # Sort query parameters for consistent comparison
         query = ""

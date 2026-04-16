@@ -82,6 +82,72 @@ class TestParseExtraction:
         assert any("bg.png" in u for u in asset_urls)
 
 
+class TestBaseHrefHandling:
+    """<base href> must override the default base URL for resolving relative links."""
+
+    def test_base_href_overrides_base_url(self) -> None:
+        html = '''<html><head><base href="https://other.com/"></head>
+        <body><a href="page">Link</a></body></html>'''
+        result = _make_parser().parse(html, "https://example.com/dir/")
+        assert any("other.com/page" in u for u in result.links)
+        assert not any("example.com" in u for u in result.links)
+
+    def test_base_href_relative(self) -> None:
+        html = '''<html><head><base href="/subdir/"></head>
+        <body><a href="page.html">Link</a></body></html>'''
+        result = _make_parser().parse(html, "https://example.com/")
+        assert any("example.com/subdir/page.html" in u for u in result.links)
+
+
+class TestExpandedLinkExtraction:
+    """Link extraction must cover <area>, <iframe>, <frame>, and meta refresh."""
+
+    def test_area_href_extracted(self) -> None:
+        html = '''<html><body>
+        <map name="m"><area href="/region1"><area href="/region2"></map>
+        </body></html>'''
+        result = _make_parser().parse(html, BASE_URL)
+        assert any("/region1" in u for u in result.links)
+        assert any("/region2" in u for u in result.links)
+
+    def test_iframe_src_extracted(self) -> None:
+        html = '<html><body><iframe src="/embed/page"></iframe></body></html>'
+        result = _make_parser().parse(html, BASE_URL)
+        assert any("/embed/page" in u for u in result.links)
+
+    def test_frame_src_extracted(self) -> None:
+        html = '<html><frameset><frame src="/frame1.html"><frame src="/frame2.html"></frameset></html>'
+        result = _make_parser().parse(html, BASE_URL)
+        assert any("frame1.html" in u for u in result.links)
+        assert any("frame2.html" in u for u in result.links)
+
+    def test_meta_refresh_extracted(self) -> None:
+        html = '''<html><head>
+        <meta http-equiv="refresh" content="0;url=https://example.com/new-page">
+        </head><body></body></html>'''
+        result = _make_parser().parse(html, BASE_URL)
+        assert any("new-page" in u for u in result.links)
+
+
+class TestInlineStyleAssets:
+    """Assets in inline style="" attributes must be discovered."""
+
+    def test_background_image_in_style_attr(self) -> None:
+        html = '<html><body><div style="background-image: url(\'/img/bg.jpg\')"></div></body></html>'
+        result = _make_parser().parse(html, BASE_URL)
+        asset_urls = [a.url for a in result.assets]
+        assert any("bg.jpg" in u for u in asset_urls)
+
+    def test_multiple_urls_in_style_attr(self) -> None:
+        html = '''<html><body>
+        <div style="background: url('/a.png'); border-image: url('/b.png')"></div>
+        </body></html>'''
+        result = _make_parser().parse(html, BASE_URL)
+        asset_urls = [a.url for a in result.assets]
+        assert any("a.png" in u for u in asset_urls)
+        assert any("b.png" in u for u in asset_urls)
+
+
 class TestRewriteUrls:
     """Tests for HtmlParser.rewrite_urls()."""
 
